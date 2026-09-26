@@ -2,41 +2,285 @@ name: Build App Nhận tin nhắn
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Java
+      - name: Setup Java 17
         uses: actions/setup-java@v4
-        with: { distribution: 'temurin', java-version: '17' }
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
-        with: { flutter-version: '3.19.0', channel: 'stable', cache: true }
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+          cache: true
 
       - name: Tạo project Nhận tin nhắn
         run: |
           flutter create --org com.example --project-name receive_app receive_app_build
           cd receive_app_build
+          
           cat > pubspec.yaml << 'EOF'
           name: receive_app
           description: Receive Messages App
           publish_to: 'none'
           version: 1.0.0+1
+          
           environment:
             sdk: '>=3.0.0 <4.0.0'
+          
           dependencies:
-            flutter: { sdk: flutter }
+            flutter:
+              sdk: flutter
             http: ^1.2.0
+          
+          dev_dependencies:
+            flutter_test:
+              sdk: flutter
+            flutter_lints: ^3.0.0
+          
           flutter:
             uses-material-design: true
           EOF
-          # ⭐ Dán code app Nhận tin nhắn ở trên
+          
           cat > lib/main.dart << 'DART_EOF'
-          [DÁN CODE APP NHẬN]
+          import 'package:flutter/material.dart';
+          import 'package:http/http.dart' as http;
+          import 'dart:convert';
+          import 'dart:async';
+
+          const String FIREBASE_URL = 'https://chat-app-hung-default-rtdb.firebaseio.com';
+
+          void main() => runApp(const MyApp());
+
+          class MyApp extends StatelessWidget {
+            const MyApp({super.key});
+            @override
+            Widget build(BuildContext context) {
+              return MaterialApp(
+                title: 'Nhận tin nhắn',
+                debugShowCheckedModeBanner: false,
+                theme: ThemeData(primarySwatch: Colors.green, useMaterial3: true),
+                home: const ReceiveScreen(),
+              );
+            }
+          }
+
+          class ReceiveScreen extends StatefulWidget {
+            const ReceiveScreen({super.key});
+            @override
+            State<ReceiveScreen> createState() => _ReceiveScreenState();
+          }
+
+          class _ReceiveScreenState extends State<ReceiveScreen> {
+            List<Map<String, dynamic>> _messages = [];
+            Timer? _timer;
+            bool _loading = true;
+            int _lastCount = 0;
+
+            @override
+            void initState() {
+              super.initState();
+              _loadMessages();
+              _timer = Timer.periodic(const Duration(seconds: 3), (_) => _loadMessages());
+            }
+
+            @override
+            void dispose() {
+              _timer?.cancel();
+              super.dispose();
+            }
+
+            Future<void> _loadMessages() async {
+              try {
+                final r = await http.get(Uri.parse('$FIREBASE_URL/messages.json'));
+                if (r.statusCode == 200) {
+                  final data = jsonDecode(r.body);
+                  if (data == null) {
+                    setState(() {
+                      _messages = [];
+                      _loading = false;
+                    });
+                    return;
+                  }
+                  final Map<String, dynamic> map = Map<String, dynamic>.from(data);
+                  final list = map.entries
+                      .map((e) => {...Map<String, dynamic>.from(e.value), 'id': e.key})
+                      .toList();
+                  list.sort((a, b) => (a['timestamp'] ?? 0).compareTo(b['timestamp'] ?? 0));
+                  setState(() {
+                    _messages = list;
+                    _loading = false;
+                  });
+                  if (list.length > _lastCount && _lastCount > 0) {
+                    final newest = list.last;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('📩 Tin mới từ ${newest['user']}'),
+                        backgroundColor: Colors.green,
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                  _lastCount = list.length;
+                }
+              } catch (e) {
+                print('❌ $e');
+                setState(() => _loading = false);
+              }
+            }
+
+            Future<void> _clearAll() async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: const Text('Xóa tất cả?'),
+                  content: const Text('Bạn có chắc muốn xóa hết tin nhắn?'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Xóa', style: TextStyle(color: Colors.red))),
+                  ],
+                ),
+              );
+              if (ok == true) {
+                await http.delete(Uri.parse('$FIREBASE_URL/messages.json'));
+                setState(() {
+                  _messages = [];
+                  _lastCount = 0;
+                });
+              }
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text('📨 Nhận tin nhắn'),
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  actions: [
+                    IconButton(icon: const Icon(Icons.refresh), onPressed: _loadMessages, tooltip: 'Tải lại'),
+                    IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: _messages.isEmpty ? null : _clearAll,
+                        tooltip: 'Xóa hết'),
+                  ],
+                ),
+                body: Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      color: Colors.green.shade50,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.wifi_tethering, color: Colors.green),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text('Đang lắng nghe... (${_messages.length} tin nhắn)',
+                                style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                          ),
+                          if (_loading)
+                            const SizedBox(width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green)),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: _messages.isEmpty
+                          ? const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.inbox, size: 80, color: Colors.grey),
+                                  SizedBox(height: 16),
+                                  Text('Chưa có tin nhắn nào', style: TextStyle(fontSize: 16, color: Colors.grey)),
+                                  SizedBox(height: 8),
+                                  Text('Mở app "Chat" để gửi tin nhắn thử', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                                ],
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: _loadMessages,
+                              child: ListView.builder(
+                                padding: const EdgeInsets.all(12),
+                                itemCount: _messages.length,
+                                itemBuilder: (_, i) {
+                                  final m = _messages[i];
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    elevation: 2,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      side: BorderSide(color: Colors.green.shade200),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(14),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              CircleAvatar(
+                                                radius: 18,
+                                                backgroundColor: Colors.green,
+                                                child: Text(
+                                                  (m['user'] ?? '?').toString().substring(0, 1).toUpperCase(),
+                                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(m['user'] ?? 'Ẩn danh',
+                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                                    Text(m['time'] ?? '',
+                                                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                                  ],
+                                                ),
+                                              ),
+                                              const Icon(Icons.mark_email_unread, color: Colors.green, size: 20),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey[100],
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(m['text'] ?? '', style: const TextStyle(fontSize: 15)),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
           DART_EOF
+
+      - name: Thêm quyền Internet
+        run: |
+          cd receive_app_build
           sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' android/app/src/main/AndroidManifest.xml
 
       - name: Build APK
@@ -45,8 +289,9 @@ jobs:
           flutter pub get
           flutter build apk --release
 
-      - name: Upload
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-nhan-tin-nhan-apk
           path: receive_app_build/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
