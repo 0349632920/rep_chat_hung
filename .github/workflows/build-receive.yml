@@ -1,0 +1,52 @@
+name: Build App Nhận tin nhắn
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with: { distribution: 'temurin', java-version: '17' }
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with: { flutter-version: '3.19.0', channel: 'stable', cache: true }
+
+      - name: Tạo project Nhận tin nhắn
+        run: |
+          flutter create --org com.example --project-name receive_app receive_app_build
+          cd receive_app_build
+          cat > pubspec.yaml << 'EOF'
+          name: receive_app
+          description: Receive Messages App
+          publish_to: 'none'
+          version: 1.0.0+1
+          environment:
+            sdk: '>=3.0.0 <4.0.0'
+          dependencies:
+            flutter: { sdk: flutter }
+            http: ^1.2.0
+          flutter:
+            uses-material-design: true
+          EOF
+          # ⭐ Dán code app Nhận tin nhắn ở trên
+          cat > lib/main.dart << 'DART_EOF'
+          [DÁN CODE APP NHẬN]
+          DART_EOF
+          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|' android/app/src/main/AndroidManifest.xml
+
+      - name: Build APK
+        run: |
+          cd receive_app_build
+          flutter pub get
+          flutter build apk --release
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-nhan-tin-nhan-apk
+          path: receive_app_build/build/app/outputs/flutter-apk/app-release.apk
