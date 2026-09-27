@@ -3,8 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
 
-// ⭐ CÙNG URL FIREBASE
-const String FIREBASE_URL = 'https://chat-app-hung-default-rtdb.firebaseio.com';
+const String FIREBASE_URL = 'https://chat-app-hung-default-rtdb.asia-southeast1.firebasedatabase.app';
 
 void main() => runApp(const MyApp());
 
@@ -13,7 +12,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Nhận tin nhắn',
+      title: 'Nhan tin nhan',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(primarySwatch: Colors.green, useMaterial3: true),
       home: const ReceiveScreen(),
@@ -32,12 +31,12 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   Timer? _timer;
   bool _loading = true;
   int _lastCount = 0;
+  String _lastError = '';
 
   @override
   void initState() {
     super.initState();
     _loadMessages();
-    // ⭐ TỰ ĐỘNG CẬP NHẬT MỖI 3 GIÂY
     _timer = Timer.periodic(const Duration(seconds: 3), (_) => _loadMessages());
   }
 
@@ -47,16 +46,20 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     super.dispose();
   }
 
-  // ⭐ TẢI TIN NHẮN TỪ FIREBASE
   Future<void> _loadMessages() async {
     try {
-      final r = await http.get(Uri.parse('$FIREBASE_URL/messages.json'));
+      final url = '$FIREBASE_URL/messages.json';
+      final r = await http.get(Uri.parse(url));
+      print('LOAD: $url -> ${r.statusCode}');
+      print('BODY: ${r.body}');
+
       if (r.statusCode == 200) {
         final data = jsonDecode(r.body);
         if (data == null) {
           setState(() {
             _messages = [];
             _loading = false;
+            _lastError = '';
           });
           return;
         }
@@ -64,45 +67,49 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
         final list = map.entries
             .map((e) => {...Map<String, dynamic>.from(e.value), 'id': e.key})
             .toList();
-        // Sắp xếp theo timestamp
-        list.sort((a, b) =>
-            (a['timestamp'] ?? 0).compareTo(b['timestamp'] ?? 0));
+        list.sort((a, b) => (a['timestamp'] ?? 0).compareTo(b['timestamp'] ?? 0));
         setState(() {
           _messages = list;
           _loading = false;
+          _lastError = '';
         });
-
-        // ⭐ THÔNG BÁO KHI CÓ TIN MỚI
         if (list.length > _lastCount && _lastCount > 0) {
           final newest = list.last;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('📩 Tin mới từ ${newest['user']}'),
+              content: Text('Tin moi tu ${newest['user']}'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 2),
             ),
           );
         }
         _lastCount = list.length;
+      } else {
+        setState(() {
+          _loading = false;
+          _lastError = 'HTTP ${r.statusCode}';
+        });
       }
     } catch (e) {
-      print('❌ $e');
-      setState(() => _loading = false);
+      print('LOI: $e');
+      setState(() {
+        _loading = false;
+        _lastError = '$e';
+      });
     }
   }
 
-  // ⭐ XÓA TẤT CẢ TIN NHẮN
   Future<void> _clearAll() async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Xóa tất cả?'),
-        content: const Text('Bạn có chắc muốn xóa hết tin nhắn?'),
+        title: const Text('Xoa tat ca?'),
+        content: const Text('Ban co chac muon xoa het tin nhan?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Hủy')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Huy')),
           TextButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Xóa', style: TextStyle(color: Colors.red))),
+              child: const Text('Xoa', style: TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -119,50 +126,50 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('📨 Nhận tin nhắn'),
+        title: const Text('Nhan tin nhan'),
         backgroundColor: Colors.green,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadMessages, tooltip: 'Tai lai'),
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadMessages,
-            tooltip: 'Tải lại',
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: _messages.isEmpty ? null : _clearAll,
-            tooltip: 'Xóa hết',
-          ),
+              icon: const Icon(Icons.delete),
+              onPressed: _messages.isEmpty ? null : _clearAll,
+              tooltip: 'Xoa het'),
         ],
       ),
       body: Column(
         children: [
-          // Banner trạng thái
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
             color: Colors.green.shade50,
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.wifi_tethering, color: Colors.green),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Đang lắng nghe... (${_messages.length} tin nhắn)',
-                    style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-                  ),
+                Row(
+                  children: [
+                    const Icon(Icons.wifi_tethering, color: Colors.green),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text('Dang lang nghe... (${_messages.length} tin nhan)',
+                          style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                    ),
+                    if (_loading)
+                      const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green)),
+                  ],
                 ),
-                if (_loading)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green),
+                if (_lastError.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('Loi: $_lastError',
+                        style: const TextStyle(color: Colors.red, fontSize: 11)),
                   ),
               ],
             ),
           ),
-
-          // Danh sách tin nhắn
           Expanded(
             child: _messages.isEmpty
                 ? const Center(
@@ -171,10 +178,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       children: [
                         Icon(Icons.inbox, size: 80, color: Colors.grey),
                         SizedBox(height: 16),
-                        Text('Chưa có tin nhắn nào',
+                        Text('Chua co tin nhan nao',
                             style: TextStyle(fontSize: 16, color: Colors.grey)),
                         SizedBox(height: 8),
-                        Text('Mở app "Chat" để gửi tin nhắn thử',
+                        Text('Mo app Chat de gui tin nhan thu',
                             style: TextStyle(fontSize: 13, color: Colors.grey)),
                       ],
                     ),
@@ -214,15 +221,11 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            m['user'] ?? 'Ẩn danh',
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold, fontSize: 15),
-                                          ),
-                                          Text(
-                                            m['time'] ?? '',
-                                            style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                          ),
+                                          Text(m['user'] ?? 'An danh',
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.bold, fontSize: 15)),
+                                          Text(m['time'] ?? '',
+                                              style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                         ],
                                       ),
                                     ),
@@ -238,10 +241,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                                     color: Colors.grey[100],
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: Text(
-                                    m['text'] ?? '',
-                                    style: const TextStyle(fontSize: 15),
-                                  ),
+                                  child: Text(m['text'] ?? '', style: const TextStyle(fontSize: 15)),
                                 ),
                               ],
                             ),
