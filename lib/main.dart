@@ -51,8 +51,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
       final url = '$FIREBASE_URL/messages.json';
       final r = await http.get(Uri.parse(url));
       print('LOAD: $url -> ${r.statusCode}');
-      print('BODY: ${r.body}');
-
+      
       if (r.statusCode == 200) {
         final data = jsonDecode(r.body);
         if (data == null) {
@@ -193,12 +192,16 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                       itemCount: _messages.length,
                       itemBuilder: (_, i) {
                         final m = _messages[i];
+                        final isReply = m['replyToText'] != null;
                         return Card(
                           margin: const EdgeInsets.only(bottom: 10),
                           elevation: 2,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(color: Colors.green.shade200),
+                            side: BorderSide(
+                              color: isReply ? Colors.amber : Colors.green.shade200,
+                              width: isReply ? 2 : 1,
+                            ),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(14),
@@ -229,11 +232,68 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                                         ],
                                       ),
                                     ),
-                                    const Icon(Icons.mark_email_unread,
-                                        color: Colors.green, size: 20),
+                                    if (isReply)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.amber.shade100,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.reply, size: 12, color: Colors.orange),
+                                            SizedBox(width: 2),
+                                            Text('Reply', style: TextStyle(fontSize: 10, color: Colors.orange, fontWeight: FontWeight.bold)),
+                                          ],
+                                        ),
+                                      )
+                                    else
+                                      const Icon(Icons.mark_email_unread,
+                                          color: Colors.green, size: 20),
                                   ],
                                 ),
                                 const SizedBox(height: 10),
+                                
+                                // ⭐ TRÍCH DẪN TIN GỐC
+                                if (isReply)
+                                  Container(
+                                    width: double.infinity,
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[100],
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: const Border(
+                                        left: BorderSide(color: Colors.indigo, width: 3),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.reply, size: 12, color: Colors.indigo),
+                                            const SizedBox(width: 4),
+                                            Text(m['replyToUser'] ?? '',
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.indigo)),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(m['replyToText'] ?? '',
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                                fontSize: 13,
+                                                fontStyle: FontStyle.italic,
+                                                color: Colors.black54)),
+                                      ],
+                                    ),
+                                  ),
+                                
                                 Container(
                                   width: double.infinity,
                                   padding: const EdgeInsets.all(10),
@@ -241,7 +301,8 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
                                     color: Colors.grey[100],
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: Text(m['text'] ?? '', style: const TextStyle(fontSize: 15)),
+                                  child: Text(m['text'] ?? '',
+                                      style: const TextStyle(fontSize: 15)),
                                 ),
                               ],
                             ),
